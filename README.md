@@ -16,6 +16,7 @@ Runnable with output to a specified csv via:
     cargo run -- <input_csv.csv> > <csv_to_write_to.csv>
 
 * ex. `cargo run -- transactions.csv > accounts.csv`
+* you could add the csv you want to use into root so you dont have to write out the whole file path
 * a csv needs to be provided or process will exit
 * a csv will be generated in the root directory following running this command
 
