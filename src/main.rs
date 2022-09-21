@@ -289,7 +289,6 @@ fn parse_csv_into_hashmaps(file_path: OsString) -> Result<HashMap<ClientKey, Cli
 
             },
         }        
-        // println!("{:?}", record);
     }
     
     Ok(account_hashmap)

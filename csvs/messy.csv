@@ -4,7 +4,6 @@ deposit, 2, 2, 2.0
 deposit, 1, 3, 2.0
 withdrawal, 1, 4, 1.5
 withdrawal, 2, 5, 3.000
-dispute, 1, 1,
-resolve, 1, 1,
-dispute, 2, 2,
-chargeback, 2, 2,
+dispute, 1, 1, null
+resolve, 1, 1, None
+dispute, 2, 2, nill
