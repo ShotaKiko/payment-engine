@@ -1,9 +1,9 @@
-use std::env;
+use std::{env, io};
 use std::error::Error;
 use std::process;
 use std::ffi::OsString;
 use csv::ReaderBuilder;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 
@@ -29,17 +29,17 @@ enum TransactionType {
     Chargeback,
 }
 
-impl TransactionType {
-    fn as_string(&self) -> String {
-        match self {
-            TransactionType::Deposit => "deposit".to_string(),
-            TransactionType::Withdrawal => "withdrawal".to_string(),
-            TransactionType::Dispute => "dispute".to_string(),
-            TransactionType::Resolve => "resolve".to_string(),
-            TransactionType::Chargeback => "chargeback".to_string(),
-        }
-    }
-}
+// impl TransactionType {
+//     fn as_string(&self) -> String {
+//         match self {
+//             TransactionType::Deposit => "deposit".to_string(),
+//             TransactionType::Withdrawal => "withdrawal".to_string(),
+//             TransactionType::Dispute => "dispute".to_string(),
+//             TransactionType::Resolve => "resolve".to_string(),
+//             TransactionType::Chargeback => "chargeback".to_string(),
+//         }
+//     }
+// }
 
 type TransactionKey = u32; //alias for transaction_id for tx hashmap
 
@@ -62,7 +62,7 @@ struct ClientAccountValues {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct AccountRecord {
     client: u16,
     available: f64,
@@ -94,14 +94,16 @@ fn get_file_path() -> Result<OsString, Box<dyn Error>> {
 fn run_payment_engine() -> Result<(), Box<dyn Error>> {
     let file_path = get_file_path()?; //TODO: Add a check for file path type (ie: confirm it is a .csv)
 
-    parse_csv_into_hashmaps(file_path)?;
+    let account_hashmap = parse_csv_into_hashmaps(file_path)?;
+
+    write_csv(account_hashmap)?;
 
     Ok(())
 }
 
 
 //Parse csv into hashmap to run account statement csv generation logic
-fn parse_csv_into_hashmaps(file_path: OsString) -> Result<(), Box<dyn Error>> {
+fn parse_csv_into_hashmaps(file_path: OsString) -> Result<HashMap<ClientKey, ClientAccountValues>, Box<dyn Error>> {
 
     let mut reader = ReaderBuilder::new().trim(csv::Trim::All).from_path(file_path)?; //also trims all whitespace
 
@@ -296,13 +298,32 @@ fn parse_csv_into_hashmaps(file_path: OsString) -> Result<(), Box<dyn Error>> {
                     }
                 }
 
-            }
-            
-            _ => (), //for all other tx types we assume its an error in the csv and do nothing
-            
+            },
         }        
-        println!("{:?}", record);
+        // println!("{:?}", record);
     }
     
+    Ok(account_hashmap)
+}
+
+
+fn write_csv(accounts_hashmap: HashMap<ClientKey, ClientAccountValues>) -> Result<(), Box<dyn Error>> {
+
+    let mut writer = csv::Writer::from_writer(io::stdout());
+    let decimal_precision_modifier = f64::powi(10.0, 4); //configurable to desired decimal precision
+
+    for (k, v) in accounts_hashmap {
+        writer.serialize(AccountRecord {
+            client: k,
+            available: f64::trunc((v.available * decimal_precision_modifier) / (decimal_precision_modifier)),
+            held: f64::trunc((v.held * decimal_precision_modifier) / (decimal_precision_modifier)),
+            total:f64::trunc((v.total * decimal_precision_modifier) / (decimal_precision_modifier)),
+            locked: v.locked,
+        })?;
+    }
+
+
+    writer.flush()?;
+
     Ok(())
 }
