@@ -29,17 +29,6 @@ enum TransactionType {
     Chargeback,
 }
 
-// impl TransactionType {
-//     fn as_string(&self) -> String {
-//         match self {
-//             TransactionType::Deposit => "deposit".to_string(),
-//             TransactionType::Withdrawal => "withdrawal".to_string(),
-//             TransactionType::Dispute => "dispute".to_string(),
-//             TransactionType::Resolve => "resolve".to_string(),
-//             TransactionType::Chargeback => "chargeback".to_string(),
-//         }
-//     }
-// }
 
 type TransactionKey = u32; //alias for transaction_id for tx hashmap
 
@@ -310,14 +299,14 @@ fn parse_csv_into_hashmaps(file_path: OsString) -> Result<HashMap<ClientKey, Cli
 fn write_csv(accounts_hashmap: HashMap<ClientKey, ClientAccountValues>) -> Result<(), Box<dyn Error>> {
 
     let mut writer = csv::Writer::from_writer(io::stdout());
-    let decimal_precision_modifier = f64::powi(10.0, 4); //configurable to desired decimal precision
+    let decimal_precision_modifier = f64::powi(10.0, 4); //configurable to desired decimal precision by changin second param
 
     for (k, v) in accounts_hashmap {
         writer.serialize(AccountRecord {
             client: k,
-            available: f64::trunc((v.available * decimal_precision_modifier) / (decimal_precision_modifier)),
-            held: f64::trunc((v.held * decimal_precision_modifier) / (decimal_precision_modifier)),
-            total:f64::trunc((v.total * decimal_precision_modifier) / (decimal_precision_modifier)),
+            available: (v.available * decimal_precision_modifier).round() / decimal_precision_modifier,
+            held: (v.held * decimal_precision_modifier).round() / decimal_precision_modifier,
+            total: (v.total * decimal_precision_modifier).round() / decimal_precision_modifier,
             locked: v.locked,
         })?;
     }
