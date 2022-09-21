@@ -62,6 +62,7 @@ struct ClientAccountValues {
 }
 
 
+#[derive(Debug)]
 struct AccountRecord {
     client: u16,
     available: f64,
@@ -111,8 +112,10 @@ fn parse_csv_into_hashmaps(file_path: OsString) -> Result<(), Box<dyn Error>> {
         let record: TransactionRecord = record_result?;
 
         match record.transaction_type {
+            //Note to reader: We're opting for option unwraps over if lets because I believe the former is more readable in this specific case because of all the business logic checks we need. 
+            //See Dispute match arm for commented version of if let logic
+            
             TransactionType::Deposit => {
-
                 //update an existing entry with the deposit amount if not locked
                 if account_hashmap.contains_key(&record.client_id) {
                     let is_locked = account_hashmap.get_key_value(&record.client_id).unwrap().1.locked;//safe to unwrap here, we have already done a contains key check
@@ -182,11 +185,122 @@ fn parse_csv_into_hashmaps(file_path: OsString) -> Result<(), Box<dyn Error>> {
                     } //We are assuming that if an account is locked then we can disregard withdrawals from this client account and the same with insufficient funds scenario
                 } // else no operation needed and we dont write a transaction that was never processes to tx hashmap
             },
-            _ => todo!()
+
+            TransactionType::Dispute => {
+                //query tx hashmap by tx id as key
+                //if found update account with associated client id and tx dispute bool
+                if transaction_hashmap.contains_key(&record.transaction_id) {
+                    let associated_client_id = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.client_id;// safe to unwrap here because we have checked for key
+                    let associated_amount = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.amount;
+
+                    if associated_amount.is_some() {
+                        let amount = associated_amount.unwrap(); //safe to unwrap after is_some check
+                        
+                        if account_hashmap.contains_key(&associated_client_id) {
+                    
+                            let is_locked = account_hashmap.get_key_value(&associated_client_id).unwrap().1.locked;//safe to unwrap here, we have already done a contains key check    
+                            if !is_locked {
+                                account_hashmap.entry(associated_client_id).and_modify(|a| {
+                                    a.available -= amount;
+                                    a.held += amount;
+                                    a.total = a.available + a.held
+                                });
+
+                                transaction_hashmap.entry(record.transaction_id).and_modify(|t| t.in_dispute = true); //update this transaction as disputed
+                            }
+                        }
+                    }
+                }
+                
+                //Below is the same logic implemented with if lets. if let is usually favored over the safe option unwrap but regardless I think the above is easier to read/follow
+                // if transaction_hashmap.contains_key(&record.transaction_id) {
+
+                //     if let Some(transaction_kv) = transaction_hashmap.get_key_value(&record.transaction_id){
+                //         let associated_client_id = transaction_kv.1.client_id;
+
+                //         if let Some(associated_amount) = transaction_kv.1.amount {
+
+                //             if account_hashmap.contains_key(&associated_client_id){
+
+                //                 if let Some(account_kv) = account_hashmap.get_key_value(&associated_client_id) {
+                //                     let is_locked = account_kv.1.locked;
+
+                //                     if !is_locked {
+                //                         account_hashmap.entry(associated_client_id).and_modify(|a| {
+                //                             a.available -= associated_amount;
+                //                             a.held += associated_amount;
+                //                             a.total = a.available + a.held
+                //                         });
+                    
+                //                          transaction_hashmap.entry(record.transaction_id).and_modify(|t| t.in_dispute = true);
+
+                //                     } 
+                //                 }
+                //             }
+                //         }
+                //     }
+                // }
+            },
+
+            TransactionType::Resolve => {
+                //query tx hashmap by tx id as key
+                //if found update account with associated client id, releasing held amount and set tx dispute bool to false again
+                if transaction_hashmap.contains_key(&record.transaction_id) {
+                    let associated_client_id = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.client_id;// safe to unwrap here because we have checked for key
+                    let associated_amount = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.amount;
+                    let tx_in_dispute = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.in_dispute;
+
+                    if associated_amount.is_some() && tx_in_dispute { //if this tx is not in dispute we can skip all proceeding logic
+                        let amount = associated_amount.unwrap(); //safe to unwrap after is_some check
+                        
+                        if account_hashmap.contains_key(&associated_client_id) {
+                    
+                            let is_locked = account_hashmap.get_key_value(&associated_client_id).unwrap().1.locked;//safe to unwrap here, we have already done a contains key check    
+                            if !is_locked {
+                                account_hashmap.entry(associated_client_id).and_modify(|a| {
+                                    a.available += amount;
+                                    a.held -= amount;
+                                });
+
+                                transaction_hashmap.entry(record.transaction_id).and_modify(|t| t.in_dispute = false); //update this transaction as disputed
+                            }
+                        }
+                    }
+                }
+            },
+
+            TransactionType::Chargeback => {
+                //query tx hashmap by tx.id
+                //if exists and in dispute update held and total amount, locking associated client account
+                if transaction_hashmap.contains_key(&record.transaction_id) {
+                    let associated_client_id = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.client_id;// safe to unwrap here because we have checked for key
+                    let associated_amount = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.amount;
+                    let tx_in_dispute = transaction_hashmap.get_key_value(&record.transaction_id).unwrap().1.in_dispute;
+
+                    if associated_amount.is_some() && tx_in_dispute { //if this tx is not in dispute we can skip all proceeding logic
+                        let amount = associated_amount.unwrap(); //safe to unwrap after is_some check
+                        
+                        if account_hashmap.contains_key(&associated_client_id) {
+                    
+                            let is_locked = account_hashmap.get_key_value(&associated_client_id).unwrap().1.locked;//safe to unwrap here, we have already done a contains key check    
+                            if !is_locked {
+                                account_hashmap.entry(associated_client_id).and_modify(|a| {
+                                    a.held -= amount;
+                                    a.total -= amount;
+                                    a.locked = true;
+                                });
+
+                                transaction_hashmap.entry(record.transaction_id).and_modify(|t| t.in_dispute = false); //update this transaction as disputed
+                            }
+                        }
+                    }
+                }
+
+            }
             
-        }
-        
-        
+            _ => (), //for all other tx types we assume its an error in the csv and do nothing
+            
+        }        
         println!("{:?}", record);
     }
     
