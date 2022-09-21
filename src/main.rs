@@ -299,7 +299,7 @@ fn parse_csv_into_hashmaps(file_path: OsString) -> Result<HashMap<ClientKey, Cli
 fn write_csv(accounts_hashmap: HashMap<ClientKey, ClientAccountValues>) -> Result<(), Box<dyn Error>> {
 
     let mut writer = csv::Writer::from_writer(io::stdout());
-    let decimal_precision_modifier = f64::powi(10.0, 4); //configurable to desired decimal precision by changin second param
+    let decimal_precision_modifier = f64::powi(10.0, 4); //configurable to desired decimal precision by changing second param
 
     for (k, v) in accounts_hashmap {
         writer.serialize(AccountRecord {
